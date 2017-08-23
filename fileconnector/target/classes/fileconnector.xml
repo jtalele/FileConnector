@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+    <jms:activemq-connector name="Active_MQ" specification="1.1" username="admin" password="admin" brokerURL="tcp://localhost:61616" validateConnections="true" doc:name="Active MQ"/>
+   
+    <flow name="fileconnectorFlow">
+        <file:inbound-endpoint path="src/main/resources/sourceDir" moveToPattern="#[message.inboundProperties.originalFilename].backup"  responseTimeout="10000" doc:name="ReadFile" moveToDirectory="src/main/resources/backupDir"/>
+        <dw:transform-message doc:name="Transform Message" metadata:id="6202bdbf-65e4-4e3f-881b-ca10f2573683">
+            <dw:input-payload mimeType="application/csv"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload	]]></dw:set-payload>
+        </dw:transform-message>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+        <foreach doc:name="For Each">
+            <jms:outbound-endpoint queue="file.connector.queue" connector-ref="Active_MQ" doc:name="JMS"/>
+            <logger message="cunter: #[flowVars.counter] ---- Root Message: #[payload]" level="INFO" doc:name="Logger"/>
+        </foreach>
+    </flow>
+    <flow name="fileconnectorFlow1">
+        <jms:inbound-endpoint queue="file.connector.queue" connector-ref="Active_MQ" doc:name="JMS"/>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+payload]]></dw:set-payload>
+        </dw:transform-message>
+        <set-variable variableName="FileName" value="#[payload.'Billing City']" doc:name="Variable"/>
+        <file:outbound-endpoint path="src/main/resources/destinationDir" outputPattern="#[flowVars.FileName].json" responseTimeout="10000" doc:name="WriteFile"/>
+    </flow>
+</mule>
